@@ -1,0 +1,5 @@
+(test
+ (name kanni)
+ (libraries core)
+ (preprocess
+  (pps ppx_let ppx_deriving.show)))

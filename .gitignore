@@ -1,52 +1,29 @@
-# Prerequisites
-*.d
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
+*.annot
+*.cmo
+*.cma
+*.cmi
 *.a
-*.la
-*.lo
+*.o
+*.cmx
+*.cmxs
+*.cmxa
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+# ocamlbuild working directory
+_build/
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+# ocamlbuild targets
+*.byte
+*.native
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+# oasis generated files
+setup.data
+setup.log
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# Merlin configuring file for Vim and Emacs
+.merlin
+
+# Dune generated files
+*.install
+
+# Local OPAM switch
+_opam/
