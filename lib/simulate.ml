@@ -10,7 +10,8 @@ let decode : instruction -> alu_opcode * register * register = function
 ;;
 
 let register_fetch (registers : registers) (Register r1, Register r2) : int * int =
-  List.nth_exn registers r1, List.nth_exn registers r2
+  let nth l i = Option.value ~default:0 (List.nth l i) in
+  nth registers r1, nth registers r2
 ;;
 
 let alu (alu_opcode : alu_opcode) ((i1, i2) : int * int) : int =
