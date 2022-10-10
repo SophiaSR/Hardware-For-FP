@@ -1,12 +1,20 @@
 open! Core
 
 type register = Register of int
-type instruction = Add of register * register
+
+type instruction =
+  | Add of register * register
+  | Sub of register * register
+
 type registers = int list
-type alu_opcode = Add
+
+type alu_opcode =
+  | Add
+  | Sub
 
 let decode : instruction -> alu_opcode * register * register = function
   | Add (r1, r2) -> Add, r1, r2
+  | Sub (r1, r2) -> Sub, r1, r2
 ;;
 
 let register_fetch (registers : registers) (Register r1, Register r2) : int * int =
@@ -17,6 +25,7 @@ let register_fetch (registers : registers) (Register r1, Register r2) : int * in
 let alu (alu_opcode : alu_opcode) ((i1, i2) : int * int) : int =
   match alu_opcode with
   | Add -> i1 + i2
+  | Sub -> i1 - i2
 ;;
 
 type program = instruction list
