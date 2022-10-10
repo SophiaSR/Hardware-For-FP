@@ -28,14 +28,18 @@ let alu (alu_opcode : alu_opcode) ((i1, i2) : int * int) : int =
   | Sub -> i1 - i2
 ;;
 
+let eval_instruction (instruction : instruction) (registers : registers) : int =
+  let alu_opcode, r1, r2 = decode instruction in
+  let inputs = register_fetch registers (r1, r2) in
+  alu alu_opcode inputs
+;;
+
 type program = instruction list
 
 let eval_program : program -> registers -> registers =
   List.fold_left ~init:Fn.id ~f:(fun eval_previous instruction registers ->
     let registers' = eval_previous registers in
-    let alu_opcode, r1, r2 = decode instruction in
-    let inputs = register_fetch registers' (r1, r2) in
-    let output = alu alu_opcode inputs in
+    let output = eval_instruction instruction registers' in
     output :: registers')
 ;;
 
