@@ -12,6 +12,12 @@ module Instruction = struct
     | Add of 'a * 'a
     | Sub of 'a * 'a
   [@@deriving show, map]
+
+  let alu : int t -> int = function
+    | Const i -> i
+    | Add (i1, i2) -> i1 + i2
+    | Sub (i1, i2) -> i1 - i2
+  ;;
 end
 
 module type REGISTER = sig
@@ -21,23 +27,26 @@ module type REGISTER = sig
 end
 
 module Processor (Register : REGISTER) = struct
-  let alu : int Instruction.t -> int = function
-    | Const i -> i
-    | Add (i1, i2) -> i1 + i2
-    | Sub (i1, i2) -> i1 - i2
-  ;;
-
   let eval_instruction (registers : RegisterArray.t) : Register.t Instruction.t -> int =
-    Instruction.map (Register.fetch registers) >>> alu
+    Instruction.map (Register.fetch registers) >>> Instruction.alu
   ;;
 
-  type program = Register.t Instruction.t list
+  type program = Register.t Instruction.t list * int
 
-  let eval_program : program -> RegisterArray.t -> RegisterArray.t =
-    List.fold_left ~init:Fn.id ~f:(fun eval_previous instruction registers ->
-      let registers' = eval_previous registers in
-      let output = eval_instruction registers' instruction in
-      output :: registers')
+  let cycle_program : program * RegisterArray.t -> program option * RegisterArray.t =
+   fun ((program, instruction_pointer), registers) ->
+    match List.nth program instruction_pointer with
+    | None -> None, registers
+    | Some instruction ->
+      let output = eval_instruction registers instruction in
+      Some (program, instruction_pointer + 1), output :: registers
+ ;;
+
+  let rec eval_program (program : program) (registers : RegisterArray.t) : RegisterArray.t
+    =
+    match cycle_program (program, registers) with
+    | None, registers' -> registers'
+    | Some program', registers' -> eval_program program' registers'
   ;;
 end
 
