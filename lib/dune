@@ -3,4 +3,4 @@
  (name kanni)
  (libraries core)
  (preprocess
-  (pps ppx_inline_test ppx_let ppx_deriving.show)))
+  (pps ppx_inline_test ppx_let ppx_deriving.show ppx_deriving.map)))
