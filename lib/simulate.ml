@@ -1,5 +1,7 @@
 open! Core
 
+let ( >>> ) f g x = g (f x)
+
 module RegisterArray = struct
   type t = int list [@@deriving show]
 end
@@ -25,12 +27,8 @@ module Processor (Register : REGISTER) = struct
     | Sub (i1, i2) -> i1 - i2
   ;;
 
-  let eval_instruction
-    (instruction : Register.t Instruction.t)
-    (registers : RegisterArray.t)
-    : int
-    =
-    instruction |> Instruction.map (Register.fetch registers) |> alu
+  let eval_instruction (registers : RegisterArray.t) : Register.t Instruction.t -> int =
+    Instruction.map (Register.fetch registers) >>> alu
   ;;
 
   type program = Register.t Instruction.t list
@@ -38,7 +36,7 @@ module Processor (Register : REGISTER) = struct
   let eval_program : program -> RegisterArray.t -> RegisterArray.t =
     List.fold_left ~init:Fn.id ~f:(fun eval_previous instruction registers ->
       let registers' = eval_previous registers in
-      let output = eval_instruction instruction registers' in
+      let output = eval_instruction registers' instruction in
       output :: registers')
   ;;
 end
