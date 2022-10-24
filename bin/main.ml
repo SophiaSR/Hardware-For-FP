@@ -4,8 +4,10 @@ let () =
   let module Processor = Processor (Source) in
   Processor.eval_program
     Instruction.(
-      ( [ Const 0
-        ; Const 1
+      ( [ Store (Literal 42)
+        ; Store (Literal 1)
+        ; Const 0
+        ; Load
         ; Add (Register 0, Register 1)
         ; Add (Register 0, Register 1)
         ; Add (Register 0, Register 1)
@@ -15,6 +17,8 @@ let () =
         ]
       , 0 ))
     []
+    0
+  |> fst
   |> RegisterArray.show
   |> print_endline
 ;;
