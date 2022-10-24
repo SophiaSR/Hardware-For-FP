@@ -1,52 +1,64 @@
 open! Core
 
-type register = Register of int
+module RegisterArray = struct
+  type t = int list [@@deriving show]
+end
 
-type 'a instruction =
-  | Const of int
-  | Add of 'a * 'a
-  | Sub of 'a * 'a
-[@@deriving map]
+module Instruction = struct
+  type 'a t =
+    | Const of int
+    | Add of 'a * 'a
+    | Sub of 'a * 'a
+  [@@deriving show, map]
+end
 
-type registers = int list
+module type REGISTER = sig
+  type t
 
-type alu_opcode =
-  | Add
-  | Sub
+  val fetch : RegisterArray.t -> t -> int
+end
 
-let register_fetch (registers : registers) (Register r) : int =
-  Option.value ~default:0 (List.nth registers r)
-;;
+module Processor (Register : REGISTER) = struct
+  let alu : int Instruction.t -> int = function
+    | Const i -> i
+    | Add (i1, i2) -> i1 + i2
+    | Sub (i1, i2) -> i1 - i2
+  ;;
 
-let alu : int instruction -> int = function
-  | Const i -> i
-  | Add (i1, i2) -> i1 + i2
-  | Sub (i1, i2) -> i1 - i2
-;;
+  let eval_instruction
+    (instruction : Register.t Instruction.t)
+    (registers : RegisterArray.t)
+    : int
+    =
+    instruction |> Instruction.map (Register.fetch registers) |> alu
+  ;;
 
-let eval_instruction (instruction : register instruction) (registers : registers) : int =
-  instruction |> map_instruction (register_fetch registers) |> alu
-;;
+  type program = Register.t Instruction.t list
 
-type program = register instruction list
+  let eval_program : program -> RegisterArray.t -> RegisterArray.t =
+    List.fold_left ~init:Fn.id ~f:(fun eval_previous instruction registers ->
+      let registers' = eval_previous registers in
+      let output = eval_instruction instruction registers' in
+      output :: registers')
+  ;;
+end
 
-let eval_program : program -> registers -> registers =
-  List.fold_left ~init:Fn.id ~f:(fun eval_previous instruction registers ->
-    let registers' = eval_previous registers in
-    let output = eval_instruction instruction registers' in
-    output :: registers')
-;;
+module Register = struct
+  type t = int [@@deriving show]
 
-let test () =
-  eval_program
-    [ Const 0
-    ; Const 1
-    ; Add (Register 0, Register 1)
-    ; Add (Register 0, Register 1)
-    ; Add (Register 0, Register 1)
-    ; Add (Register 0, Register 1)
-    ; Add (Register 0, Register 1)
-    ; Add (Register 0, Register 1)
-    ]
-    []
-;;
+  let fetch (registers : RegisterArray.t) (r : t) : int =
+    Option.value ~default:0 (List.nth registers r)
+  ;;
+end
+
+module Source = struct
+  type t =
+    | Literal of int
+    | Register of Register.t
+  [@@deriving show]
+
+  let fetch (registers : RegisterArray.t) : t -> int = function
+    | Literal i -> i
+    | Register r -> Register.fetch registers r
+  ;;
+end
