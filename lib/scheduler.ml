@@ -14,29 +14,6 @@ let example =
     , fun (x, y) -> Parallel ((add (x, y), add (y, 5)), add) )
 ;;
 
-module Deque : sig
-  type 'a t
-
-  val empty : 'a t
-  val push_front : 'a t -> 'a -> 'a t
-  val push_back : 'a t -> 'a -> 'a t
-  val pop_front : 'a t -> ('a t * 'a) option
-  val pop_back : 'a t -> ('a t * 'a) option
-end = struct
-  type 'a t = 'a list
-
-  let empty = []
-  let push_front l x = x :: l
-  let push_back l x = l @ [ x ]
-
-  let pop_front = function
-    | [] -> None
-    | x :: l -> Some (l, x)
-  ;;
-
-  let pop_back l = Option.map ~f:(fun (l', x) -> List.rev l', x) (pop_front (List.rev l))
-end
-
 module Unique_id = Unique_id.Int ()
 
 module Scheduler (S : sig
@@ -60,26 +37,30 @@ end = struct
     | Wait2 of (int * int -> program)
 
   type processor =
-    (program_with_parent * program_with_parent Deque.t) option
+    program_with_parent option
+    * program_with_parent Deque.t
     * (parent * continuation) Map.t
 
   type t = processor list
 
   let start (program : program) : t =
     List.init
-      ~f:(function
-        | 0 -> Some ((None, program), Deque.empty), Map.create ()
-        | _ -> None, Map.create ())
+      ~f:(fun i ->
+        ( (match i with
+          | 0 -> Some (None, program)
+          | _ -> None)
+        , Deque.create ()
+        , Map.create () ))
       p
   ;;
 
   let step : t -> t =
    fun processors ->
-    let processors_conts = List.map ~f:snd processors in
+    let processors_conts = List.map ~f:(fun (_, _, conts) -> conts) processors in
     List.mapi
-      ~f:(fun i (opt, conts) ->
+      ~f:(fun i (opt, deque, conts) ->
         ( Option.bind
-            ~f:(fun ((parent, program), deque) ->
+            ~f:(fun (parent, program) ->
               match program with
               | Return a ->
                 (match parent with
@@ -92,7 +73,7 @@ end = struct
                   (match cont with
                   | Wait1 k ->
                     Map.remove cont_table key;
-                    Some ((parent', k a), deque)
+                    Some (parent', k a)
                   | Wait2 k ->
                     Map.remove cont_table key;
                     Map.add_exn
@@ -104,24 +85,23 @@ end = struct
                             (match side with
                             | `Left -> fun b -> k (a, b)
                             | `Right -> fun b -> k (b, a)) );
-                    Option.map (Deque.pop_back deque) ~f:(fun (deque', program') ->
-                        program', deque')))
-              | Add ((a, b), k) -> Some ((parent, k (a + b)), deque)
+                    Deque.dequeue_back deque))
+              | Add ((a, b), k) -> Some (parent, k (a + b))
               | Parallel ((p1, p2), k) ->
                 let key = Unique_id.create () in
                 Map.add_exn ~key ~data:(parent, Wait2 k) conts;
-                Some
-                  ( (Some (i, key, `Left), p1)
-                  , Deque.push_back deque (Some (i, key, `Right), p2) ))
+                Deque.enqueue_back deque (Some (i, key, `Right), p2);
+                Some (Some (i, key, `Left), p1))
             opt
+        , deque
         , conts ))
       processors
  ;;
 
   let to_string : t -> string =
     List.to_string ~f:(function
-        | None, _ -> "-"
-        | Some ((_, program), _), _ ->
+        | None, _, _ -> "-"
+        | Some (_, program), _, _ ->
           (match program with
           | Return a -> Printf.sprintf "return %d" a
           | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
