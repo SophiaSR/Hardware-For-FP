@@ -54,45 +54,66 @@ end = struct
       p
   ;;
 
+  let ( <|> ) opt f =
+    match opt with
+    | None -> f ()
+    | Some x -> Some x
+  ;;
+
+  let steal : t -> program_with_parent option =
+   fun processors ->
+    let processor_deques = List.map ~f:(fun (_, deque, _) -> deque) processors in
+    let rec aux (deques : 'a Deque.t list) : 'a option =
+      match deques with
+      | [] -> None
+      | deque :: deques ->
+        (match Deque.dequeue_front deque with
+        | None -> aux deques
+        | Some a -> Some a)
+    in
+    aux processor_deques
+ ;;
+
   let step : t -> t =
    fun processors ->
     let processors_conts = List.map ~f:(fun (_, _, conts) -> conts) processors in
     List.mapi
       ~f:(fun i (opt, deque, conts) ->
-        ( Option.bind
-            ~f:(fun (parent, program) ->
-              match program with
-              | Return a ->
-                (match parent with
-                | None ->
-                  Printf.printf "stretchy bird says: %d\n" a;
-                  None
-                | Some (processor, key, side) ->
-                  let cont_table = List.nth_exn processors_conts processor in
-                  let parent', cont = Map.find_exn cont_table key in
-                  (match cont with
-                  | Wait1 k ->
-                    Map.remove cont_table key;
-                    Some (parent', k a)
-                  | Wait2 k ->
-                    Map.remove cont_table key;
-                    Map.add_exn
-                      cont_table
-                      ~key
-                      ~data:
-                        ( parent'
-                        , Wait1
-                            (match side with
-                            | `Left -> fun b -> k (a, b)
-                            | `Right -> fun b -> k (b, a)) );
-                    Deque.dequeue_back deque))
-              | Add ((a, b), k) -> Some (parent, k (a + b))
-              | Parallel ((p1, p2), k) ->
-                let key = Unique_id.create () in
-                Map.add_exn ~key ~data:(parent, Wait2 k) conts;
-                Deque.enqueue_back deque (Some (i, key, `Right), p2);
-                Some (Some (i, key, `Left), p1))
-            opt
+        ( (Option.bind
+             ~f:(fun (parent, program) ->
+               match program with
+               | Return a ->
+                 (match parent with
+                 | None ->
+                   Printf.printf "stretchy bird says: %d\n" a;
+                   None
+                 | Some (processor, key, side) ->
+                   let cont_table = List.nth_exn processors_conts processor in
+                   let parent', cont = Map.find_exn cont_table key in
+                   (match cont with
+                   | Wait1 k ->
+                     Map.remove cont_table key;
+                     Some (parent', k a)
+                   | Wait2 k ->
+                     Map.remove cont_table key;
+                     Map.add_exn
+                       cont_table
+                       ~key
+                       ~data:
+                         ( parent'
+                         , Wait1
+                             (match side with
+                             | `Left -> fun b -> k (a, b)
+                             | `Right -> fun b -> k (b, a)) );
+                     Deque.dequeue_back deque))
+               | Add ((a, b), k) -> Some (parent, k (a + b))
+               | Parallel ((p1, p2), k) ->
+                 let key = Unique_id.create () in
+                 Map.add_exn ~key ~data:(parent, Wait2 k) conts;
+                 Deque.enqueue_back deque (Some (i, key, `Right), p2);
+                 Some (Some (i, key, `Left), p1))
+             opt
+          <|> fun () -> steal processors)
         , deque
         , conts ))
       processors
