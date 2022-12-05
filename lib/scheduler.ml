@@ -3,7 +3,6 @@ open! Core
 type program =
   | Return of int
   | Add of (int * int) * (int -> program)
-  | Let of program * (int -> program)
   | Parallel of (program * program) * (int * int -> program)
 
 let return x = Return x
@@ -38,6 +37,8 @@ end = struct
   let pop_back l = Option.map ~f:(fun (l', x) -> List.rev l', x) (pop_front (List.rev l))
 end
 
+module Unique_id = Unique_id.Int ()
+
 module Scheduler (S : sig
   val p : int
 end) : sig
@@ -49,42 +50,81 @@ end) : sig
   val to_string : t -> string
 end = struct
   open S
+  module Map = Hashtbl.Make (Unique_id)
 
-  type processor = (program * (int -> program) Deque.t) option
+  type parent = (int * Unique_id.t * [ `Left | `Right ]) option
+  type program_with_parent = parent * program
+
+  type continuation =
+    | Wait1 of (int -> program)
+    | Wait2 of (int * int -> program)
+
+  type processor =
+    (program_with_parent * program_with_parent Deque.t) option
+    * (parent * continuation) Map.t
+
   type t = processor list
 
-  let start program =
+  let start (program : program) : t =
     List.init
-      ~f:
-        (function
-         | 0 -> Some (program, Deque.empty)
-         | _ -> None)
+      ~f:(function
+        | 0 -> Some ((None, program), Deque.empty), Map.create ()
+        | _ -> None, Map.create ())
       p
   ;;
 
   let step : t -> t =
-    List.map
-      ~f:
-        (Option.map ~f:(fun (program, deque) ->
-           match program with
-           | Return a ->
-             (match Deque.pop_back deque with
-              | None -> failwith ("we did it " ^ Int.to_string a)
-              | Some (deque', k) -> k a, deque')
-           | Add ((a, b), k) -> k (a + b), deque
-           | Let (p, k) -> p, Deque.push_back deque k
-           | Parallel ((p1, p2), k) ->
-             p1, Deque.push_back deque (fun i1 -> Let (p2, fun i2 -> k (i1, i2)))))
-  ;;
+   fun processors ->
+    let processors_conts = List.map ~f:snd processors in
+    List.mapi
+      ~f:(fun i (opt, conts) ->
+        ( Option.bind
+            ~f:(fun ((parent, program), deque) ->
+              match program with
+              | Return a ->
+                (match parent with
+                | None ->
+                  Printf.printf "stretchy bird says: %d\n" a;
+                  None
+                | Some (processor, key, side) ->
+                  let cont_table = List.nth_exn processors_conts processor in
+                  let parent', cont = Map.find_exn cont_table key in
+                  (match cont with
+                  | Wait1 k ->
+                    Map.remove cont_table key;
+                    Some ((parent', k a), deque)
+                  | Wait2 k ->
+                    Map.remove cont_table key;
+                    Map.add_exn
+                      cont_table
+                      ~key
+                      ~data:
+                        ( parent'
+                        , Wait1
+                            (match side with
+                            | `Left -> fun b -> k (a, b)
+                            | `Right -> fun b -> k (b, a)) );
+                    Option.map (Deque.pop_back deque) ~f:(fun (deque', program') ->
+                        program', deque')))
+              | Add ((a, b), k) -> Some ((parent, k (a + b)), deque)
+              | Parallel ((p1, p2), k) ->
+                let key = Unique_id.create () in
+                Map.add_exn ~key ~data:(parent, Wait2 k) conts;
+                Some
+                  ( (Some (i, key, `Left), p1)
+                  , Deque.push_back deque (Some (i, key, `Right), p2) ))
+            opt
+        , conts ))
+      processors
+ ;;
 
   let to_string : t -> string =
     List.to_string ~f:(function
-      | None -> "-"
-      | Some (program, _) ->
-        (match program with
-         | Return a -> Printf.sprintf "return %d" a
-         | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
-         | Let _ -> "let"
-         | Parallel _ -> "parallel"))
+        | None, _ -> "-"
+        | Some ((_, program), _), _ ->
+          (match program with
+          | Return a -> Printf.sprintf "return %d" a
+          | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
+          | Parallel _ -> "parallel"))
   ;;
 end
