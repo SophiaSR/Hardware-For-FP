@@ -47,8 +47,8 @@ end = struct
     List.init
       ~f:(fun i ->
         ( (match i with
-          | 0 -> Some (None, program)
-          | _ -> None)
+           | 0 -> Some (None, program)
+           | _ -> None)
         , Deque.create ()
         , Map.create () ))
       p
@@ -68,8 +68,8 @@ end = struct
       | [] -> None
       | deque :: deques ->
         (match Deque.dequeue_front deque with
-        | None -> aux deques
-        | Some a -> Some a)
+         | None -> aux deques
+         | Some a -> Some a)
     in
     aux processor_deques
  ;;
@@ -84,28 +84,28 @@ end = struct
                match program with
                | Return a ->
                  (match parent with
-                 | None ->
-                   Printf.printf "stretchy bird says: %d\n" a;
-                   None
-                 | Some (processor, key, side) ->
-                   let cont_table = List.nth_exn processors_conts processor in
-                   let parent', cont = Map.find_exn cont_table key in
-                   (match cont with
-                   | Wait1 k ->
-                     Map.remove cont_table key;
-                     Some (parent', k a)
-                   | Wait2 k ->
-                     Map.remove cont_table key;
-                     Map.add_exn
-                       cont_table
-                       ~key
-                       ~data:
-                         ( parent'
-                         , Wait1
-                             (match side with
-                             | `Left -> fun b -> k (a, b)
-                             | `Right -> fun b -> k (b, a)) );
-                     Deque.dequeue_back deque))
+                  | None ->
+                    Printf.printf "stretchy bird says: %d\n" a;
+                    None
+                  | Some (processor, key, side) ->
+                    let cont_table = List.nth_exn processors_conts processor in
+                    let parent', cont = Map.find_exn cont_table key in
+                    (match cont with
+                     | Wait1 k ->
+                       Map.remove cont_table key;
+                       Some (parent', k a)
+                     | Wait2 k ->
+                       Map.remove cont_table key;
+                       Map.add_exn
+                         cont_table
+                         ~key
+                         ~data:
+                           ( parent'
+                           , Wait1
+                               (match side with
+                                | `Left -> fun b -> k (a, b)
+                                | `Right -> fun b -> k (b, a)) );
+                       Deque.dequeue_back deque))
                | Add ((a, b), k) -> Some (parent, k (a + b))
                | Parallel ((p1, p2), k) ->
                  let key = Unique_id.create () in
@@ -121,11 +121,11 @@ end = struct
 
   let to_string : t -> string =
     List.to_string ~f:(function
-        | None, _, _ -> "-"
-        | Some (_, program), _, _ ->
-          (match program with
-          | Return a -> Printf.sprintf "return %d" a
-          | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
-          | Parallel _ -> "parallel"))
+      | None, _, _ -> "-"
+      | Some (_, program), _, _ ->
+        (match program with
+         | Return a -> Printf.sprintf "return %d" a
+         | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
+         | Parallel _ -> "parallel"))
   ;;
 end
