@@ -1,57 +1,40 @@
 open! Core
-open Kanni.Scheduler
+open Kanni.Parallel
+
+module Parallel = Parallel (struct
+  type a = int
+
+  let to_string = Int.to_string
+end)
+
+let add (a, b) = Parallel.return (a + b)
 
 let example =
-  Program.(
-    Parallel
-      ( (Parallel ((Return 1, Return 2), add), add (3, 4))
-      , fun (x, y) -> Parallel ((add (x, y), add (y, 5)), add) ))
-
-and example2 = Program.(While (10, fun i -> Add ((i, -1), fun a -> Return a)))
-
-and example3 =
-  Program.(
-    While
-      ( 10
-      , fun i ->
-          Parallel ((return i, return (-i)), fun _ -> Add ((i, -1), fun a -> Return a)) ))
-
-and example4 =
-  Program.(
-    While
-      ( 10
-      , fun i ->
-          Parallel
-            ( ( While (2 * i, fun j -> Add ((j, -1), return))
-              , While (i, fun j -> Add ((j, -1), return)) )
-            , fun _ -> Add ((i, -1), return) ) ))
+  Parallel.(
+    par
+      ( (par ((return 1, return 2), add), add (3, 4))
+      , fun (x, y) -> par ((add (x, y), add (y, 5)), add) ))
 ;;
 
-let rec example5 =
-  Program.(
+let rec example2 =
+  Parallel.(
     function
-    | 0 -> return 0
-    | n -> Parallel ((example5 (n - 1), example5 (n - 1)), add))
+    | 0 -> return 1
+    | n -> par ((example2 (n - 1), example2 (n - 1)), add))
 ;;
 
-let rec example5 =
-  Program.(
-    function
-    | 0 -> return 0
-    | n -> Parallel ((example5 (n - 1), example5 (n - 1)), fun (x, y) -> return (x + y)))
-;;
-
-let () =
-  let module Scheduler =
-    Scheduler (struct
-      let p = 6
-    end)
+let run ?(p = 6) example =
+  let fixlength s =
+    Printf.sprintf "|%10s " (String.sub ~pos:0 ~len:(Int.min 10 (String.length s)) s)
   in
-  ignore
-    (Fn.apply_n_times
-       ~n:100
-       (fun s ->
-         let () = Printf.printf "%s\n" (Scheduler.to_string s) in
-         Scheduler.step s)
-       (Scheduler.start (example5 5)))
+  let trace, a = Parallel.out ~p example in
+  List.iteri
+    ~f:(fun i procs ->
+      Printf.printf "[%2d]  " i;
+      List.iter ~f:(fixlength >>> print_string) procs;
+      Printf.printf "\n")
+    trace;
+  Printf.printf ">>> %d\n" a
 ;;
+
+let () = run ~p:10 (example2 5)
