@@ -4,8 +4,9 @@ module Program = struct
   type t =
     | Return of int
     | Let of t * (int -> t)
-    | Add of (int * int) * (int -> t)
     | Parallel of (t * t) * (int * int -> t)
+    | Add of (int * int) * (int -> t)
+    | While of int * (int -> t)
 
   let return x = Return x
   let add args = Add (args, return)
@@ -14,17 +15,11 @@ module Program = struct
     match program with
     | Return a -> Printf.sprintf "return %d" a
     | Let (p, _) -> Printf.sprintf "let %s in ..." (to_string p)
-    | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
     | Parallel _ -> "parallel"
+    | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
+    | While (a, _) -> Printf.sprintf "while %d do ..." a
   ;;
 end
-
-let example =
-  Program.(
-    Parallel
-      ( (Parallel ((Return 1, Return 2), add), add (3, 4))
-      , fun (x, y) -> Parallel ((add (x, y), add (y, 5)), add) ))
-;;
 
 module Unique_id = Unique_id.Int ()
 
@@ -89,12 +84,12 @@ end = struct
   let step : t -> t =
    fun processors ->
     let processors_conts = List.map ~f:(fun (_, _, conts) -> conts) processors in
-    List.mapi
-      ~f:(fun i (opt, deque, conts) ->
-        ( (Option.bind
+    processors
+    |> List.mapi ~f:(fun i (opt, deque, conts) ->
+         ( Option.bind
              ~f:(fun (parent, program) ->
                match program with
-               | Return a ->
+               | Program.Return a ->
                  (match parent with
                   | None ->
                     Printf.printf "stretchy bird says: %d\n" a;
@@ -122,17 +117,28 @@ end = struct
                  let key = Unique_id.create () in
                  Map.add_exn ~key ~data:(parent, Wait1 k) conts;
                  Some (Some (i, key, `Left), p)
-               | Add ((a, b), k) -> Some (parent, k (a + b))
                | Parallel ((p1, p2), k) ->
                  let key = Unique_id.create () in
                  Map.add_exn ~key ~data:(parent, Wait2 k) conts;
                  Deque.enqueue_back deque (Some (i, key, `Right), p2);
-                 Some (Some (i, key, `Left), p1))
+                 Some (Some (i, key, `Left), p1)
+               | Add ((a, b), k) -> Some (parent, k (a + b))
+               | While (a, loop) ->
+                 let p = loop a in
+                 let key = Unique_id.create () in
+                 Map.add_exn
+                   ~key
+                   ~data:
+                     ( parent
+                     , Wait1
+                         (fun a' -> if a' >= 0 then While (a', loop) else Return (-a')) )
+                   conts;
+                 Some (Some (i, key, `Left), p))
              opt
-          <|> fun () -> steal processors)
-        , deque
-        , conts ))
-      processors
+         , deque
+         , conts ))
+    |> List.map ~f:(fun (opt, deque, conts) ->
+         (opt <|> fun () -> steal processors), deque, conts)
  ;;
 
   let to_string : t -> string =
