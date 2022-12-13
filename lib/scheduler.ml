@@ -1,17 +1,29 @@
 open! Core
 
-type program =
-  | Return of int
-  | Add of (int * int) * (int -> program)
-  | Parallel of (program * program) * (int * int -> program)
+module Program = struct
+  type t =
+    | Return of int
+    | Let of t * (int -> t)
+    | Add of (int * int) * (int -> t)
+    | Parallel of (t * t) * (int * int -> t)
 
-let return x = Return x
-let add args = Add (args, return)
+  let return x = Return x
+  let add args = Add (args, return)
+
+  let rec to_string (program : t) : string =
+    match program with
+    | Return a -> Printf.sprintf "return %d" a
+    | Let (p, _) -> Printf.sprintf "let %s in ..." (to_string p)
+    | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
+    | Parallel _ -> "parallel"
+  ;;
+end
 
 let example =
-  Parallel
-    ( (Parallel ((Return 1, Return 2), add), add (3, 4))
-    , fun (x, y) -> Parallel ((add (x, y), add (y, 5)), add) )
+  Program.(
+    Parallel
+      ( (Parallel ((Return 1, Return 2), add), add (3, 4))
+      , fun (x, y) -> Parallel ((add (x, y), add (y, 5)), add) ))
 ;;
 
 module Unique_id = Unique_id.Int ()
@@ -22,7 +34,7 @@ end) : sig
   (* state of processees with program loaded in *)
   type t
 
-  val start : program -> t
+  val start : Program.t -> t
   val step : t -> t
   val to_string : t -> string
 end = struct
@@ -30,11 +42,11 @@ end = struct
   module Map = Hashtbl.Make (Unique_id)
 
   type parent = (int * Unique_id.t * [ `Left | `Right ]) option
-  type program_with_parent = parent * program
+  type program_with_parent = parent * Program.t
 
   type continuation =
-    | Wait1 of (int -> program)
-    | Wait2 of (int * int -> program)
+    | Wait1 of (int -> Program.t)
+    | Wait2 of (int * int -> Program.t)
 
   type processor =
     program_with_parent option
@@ -43,7 +55,7 @@ end = struct
 
   type t = processor list
 
-  let start (program : program) : t =
+  let start (program : Program.t) : t =
     List.init
       ~f:(fun i ->
         ( (match i with
@@ -106,6 +118,10 @@ end = struct
                                 | `Left -> fun b -> k (a, b)
                                 | `Right -> fun b -> k (b, a)) );
                        Deque.dequeue_back deque))
+               | Let (p, k) ->
+                 let key = Unique_id.create () in
+                 Map.add_exn ~key ~data:(parent, Wait1 k) conts;
+                 Some (Some (i, key, `Left), p)
                | Add ((a, b), k) -> Some (parent, k (a + b))
                | Parallel ((p1, p2), k) ->
                  let key = Unique_id.create () in
@@ -122,10 +138,6 @@ end = struct
   let to_string : t -> string =
     List.to_string ~f:(function
       | None, _, _ -> "-"
-      | Some (_, program), _, _ ->
-        (match program with
-         | Return a -> Printf.sprintf "return %d" a
-         | Add ((a, b), _) -> Printf.sprintf "add %d %d" a b
-         | Parallel _ -> "parallel"))
+      | Some (_, program), _, _ -> Program.to_string program)
   ;;
 end
