@@ -25,7 +25,7 @@ end) : sig
   val par : (t * t) * (a * a -> t) -> t
 
   (* machine *)
-  val out : p:int -> t -> string list list * a
+  val run : p:int -> t -> (string * int) option list list * a
 end = struct
   type a = A.a
 
@@ -62,7 +62,7 @@ end = struct
 
   type processors = processor list
 
-  let out ~p (graph : t) : string list list * a =
+  let run ~p (graph : t) : (string * int) option list (* each is length p *) list * a =
     let start : processors =
       List.init
         ~f:(fun i ->
@@ -134,27 +134,19 @@ end = struct
       |> List.map ~f:(fun (opt, deque, conts) ->
            (opt <|> fun () -> steal processors), deque, conts)
     in
-    let rec loop (processors : processors) : string list list * a =
+    let rec loop (processors : processors) : (string * int) option list list * a =
       match !final with
       | Some a -> [], a
       | None ->
-        let states, a = loop (step processors) in
-        ( List.filter_map
-            ~f:(fun (opt, _, _) -> Option.map ~f:(snd >>> to_string) opt)
+        let state =
+          List.map
+            ~f:(fun (opt, deque, _) ->
+              Option.map ~f:(fun (_, p) -> to_string p, Deque.length deque) opt)
             processors
-          :: states
-        , a )
+        in
+        let states, a = loop (step processors) in
+        state :: states, a
     in
     loop start
   ;;
 end
-
-(* struct
-
-
-  let to_string : t -> string =
-    List.to_string ~f:(function
-      | None, _, _ -> "-"
-      | Some (_, program), _, _ -> Program.to_string program)
-  ;;
-end *)

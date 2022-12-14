@@ -23,14 +23,17 @@ let () =
       | n -> par ((example2 (n - 1), example2 (n - 1)), add))
   in
   let run ?(p = 6) example =
-    let fixlength s =
-      Printf.sprintf "|%10s " (String.sub ~pos:0 ~len:(Int.min 10 (String.length s)) s)
-    in
-    let trace, a = Parallel.out ~p example in
+    let trace, a = Parallel.run ~p example in
     List.iteri
       ~f:(fun i procs ->
         Printf.printf "[%2d]  " i;
-        List.iter ~f:(fixlength >>> print_string) procs;
+        List.iter
+          ~f:
+            ((function
+              | None -> "[--] "
+              | Some (_, i) -> Printf.sprintf "[%2d] " i)
+            >>> print_string)
+          procs;
         Printf.printf "\n")
       trace;
     Printf.printf ">>> %s\n" (A.to_string a)
@@ -54,16 +57,6 @@ let () =
     | x :: xs, y :: ys ->
       if x < y then x :: merge (xs, y :: ys) else y :: merge (x :: xs, ys)
   in
-  (* let rec merge =
-    Parallel.(
-      function
-      | [], l2 -> return l2
-      | l1, [] -> return l1
-      | x :: xs, y :: ys ->
-        if x < y
-        then bind (merge (xs, y :: ys), fun res -> return (x :: res))
-        else bind (merge (x :: xs, ys), fun res -> return (y :: res)))
-  in *)
   let rec msort =
     Parallel.(
       function
@@ -178,14 +171,17 @@ let () =
     ]
   in
   let run ?(p = 6) example =
-    let fixlength s =
-      Printf.sprintf "|%10s " (String.sub ~pos:0 ~len:(Int.min 10 (String.length s)) s)
-    in
-    let trace, a = Parallel.out ~p example in
+    let trace, a = Parallel.run ~p example in
     List.iteri
       ~f:(fun i procs ->
         Printf.printf "[%2d]  " i;
-        List.iter ~f:(fixlength >>> print_string) procs;
+        List.iter
+          ~f:
+            ((function
+              | None -> "[--] "
+              | Some (_, i) -> Printf.sprintf "[%2d] " i)
+            >>> print_string)
+          procs;
         Printf.printf "\n")
       trace;
     Printf.printf ">>> %s\n" (A.to_string a)
