@@ -9,25 +9,31 @@ let ( <|> ) opt f =
   | Some x -> Some x
 ;;
 
-module Parallel (A : sig
-  type a
+module type SHOW = sig
+  type t
 
-  val to_string : a -> string
-end) : sig
-  open A
+  val to_string : t -> string
+end
+
+module type PARALLEL = sig
+  module A : SHOW
 
   type t
 
   (* commutative monad *)
-  val return : a -> t
-  val map : (a -> a) -> t -> t
-  val bind : t * (a -> t) -> t
-  val par : (t * t) * (a * a -> t) -> t
+  val return : A.t -> t
+  val map : (A.t -> A.t) -> t -> t
+  val bind : t * (A.t -> t) -> t
+  val par : (t * t) * (A.t * A.t -> t) -> t
 
   (* machine *)
-  val run : p:int -> t -> (string * int) option list list * a
-end = struct
-  type a = A.a
+  val run : p:int -> t -> (string * int) option list list * A.t
+end
+
+module Parallel (A : SHOW) : PARALLEL with module A = A = struct
+  module A = A
+
+  type a = A.t
 
   type t =
     | Return of a

@@ -1,29 +1,11 @@
 open! Core
 open Kanni.Parallel
 
-let () =
-  let module A = struct
-    type a = int
-
-    let to_string = Int.to_string
-  end
-  in
-  let module Parallel = Parallel (A) in
-  let add (a, b) = Parallel.return (a + b) in
-  let example1 =
-    Parallel.(
-      par
-        ( (par ((return 1, return 2), add), add (3, 4))
-        , fun (x, y) -> par ((add (x, y), add (y, 5)), add) ))
-  in
-  let rec example2 =
-    Parallel.(
-      function
-      | 0 -> return 1
-      | n -> par ((example2 (n - 1), example2 (n - 1)), add))
-  in
+module Test (P : PARALLEL) : sig
+  val run : ?p:int -> P.t -> unit
+end = struct
   let run ?(p = 6) example =
-    let trace, a = Parallel.run ~p example in
+    let trace, a = P.run ~p example in
     List.iteri
       ~f:(fun i procs ->
         Printf.printf "[%2d]  " i;
@@ -36,21 +18,39 @@ let () =
           procs;
         Printf.printf "\n")
       trace;
-    Printf.printf ">>> %s\n" (A.to_string a)
-  in
-  run ~p:2 example1;
-  run ~p:2 (example2 5);
-  run ~p:10 (example2 5)
-;;
+    Printf.printf ">>> %s\n" (P.A.to_string a)
+  ;;
+end
 
 let () =
-  let module A = struct
-    type a = int list
-
-    let to_string = List.to_string ~f:Int.to_string
-  end
+  let module P = Parallel (Int) in
+  let add (a, b) = P.return (a + b) in
+  let example1 =
+    P.(
+      par
+        ( (par ((return 1, return 2), add), add (3, 4))
+        , fun (x, y) -> par ((add (x, y), add (y, 5)), add) ))
   in
-  let module Parallel = Parallel (A) in
+  let rec example2 =
+    P.(
+      function
+      | 0 -> return 1
+      | n -> par ((example2 (n - 1), example2 (n - 1)), add))
+  in
+  let module Test = Test (P) in
+  Test.run ~p:2 example1;
+  Test.run ~p:2 (example2 5);
+  Test.run ~p:10 (example2 5)
+;;
+
+module IntList = struct
+  type t = int list
+
+  let to_string = List.to_string ~f:Int.to_string
+end
+
+let () =
+  let module P = Parallel (IntList) in
   let rec merge = function
     | [], l2 -> l2
     | l1, [] -> l1
@@ -58,7 +58,7 @@ let () =
       if x < y then x :: merge (xs, y :: ys) else y :: merge (x :: xs, ys)
   in
   let rec msort =
-    Parallel.(
+    P.(
       function
       | [] -> return []
       | [ x ] -> return [ x ]
@@ -170,21 +170,6 @@ let () =
     ; 100
     ]
   in
-  let run ?(p = 6) example =
-    let trace, a = Parallel.run ~p example in
-    List.iteri
-      ~f:(fun i procs ->
-        Printf.printf "[%2d]  " i;
-        List.iter
-          ~f:
-            ((function
-              | None -> "[--] "
-              | Some (_, i) -> Printf.sprintf "[%2d] " i)
-            >>> print_string)
-          procs;
-        Printf.printf "\n")
-      trace;
-    Printf.printf ">>> %s\n" (A.to_string a)
-  in
-  run ~p:8 (msort example_list)
+  let module Test = Test (P) in
+  Test.run ~p:8 (msort example_list)
 ;;
